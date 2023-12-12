@@ -107,7 +107,14 @@ public:
     Collision_check();
     
     bool checkCollision(const std::vector<double>& lengths, const std::vector<double>& angles, int startIdx, int endIdx);
+    bool checkCollision2(const std::vector<double>& lengths, const std::vector<double>& angles, int startIdx, int endIdx);
+    bool checkCollision3(const std::vector<double>& lengths, const std::vector<double>& angles, int startIdx, int endIdx);
+    bool checkCollision4(const std::vector<double>& lengths, const std::vector<double>& angles, int startIdx, int endIdx, const std::vector<bool>& segArc, const std::vector<double>& curvature);
+
+    Eigen::RowVector2d calculatePinCenter(const Eigen::RowVector2d& arcCenter, const Eigen::RowVector2d& wireStartPoint, double pinDistance, double radius);
+    Eigen::RowVector3d moveOnSphere(const Eigen::RowVector3d& point, const Eigen::RowVector3d& center, double arcLength,double curvature_now);
     double Collision_check::angle_cal(const Eigen::RowVector3d& p1, const Eigen::RowVector3d& p2, const Eigen::RowVector3d& p3);
+    Eigen::RowVector3d Collision_check::calculateCircleCenter(const Eigen::RowVector3d& startPoint, const Eigen::RowVector3d& finalPoint, double curvature_now);
 
     Eigen::RowVector3d wireStartPoint;
     const double M_PI = 3.14159265358979323846;
@@ -131,7 +138,9 @@ public:
 
     Eigen::RowVector3d min_corner;
     Eigen::RowVector3d max_corner;
-    bool isIntersecting(const Eigen::Vector3d& point_start, const Eigen::Vector3d& point_end, const Eigen::RowVector3d& min_corner, const Eigen::RowVector3d& max_corner);
+    bool isIntersecting(const Eigen::Vector3d& point_start, const Eigen::Vector3d& point_end, const Eigen::RowVector3d& min_corner_, const Eigen::RowVector3d& max_corner_);
+    bool isIntersecting2(const Eigen::Vector3d& point_start, const Eigen::Vector3d& point_end, const Eigen::RowVector3d& min_corner_, const Eigen::RowVector3d& max_corner_);
+
 
     std::vector<igl::Hit> hits;
     //Eigen::MatrixXi IF;

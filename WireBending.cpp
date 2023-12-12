@@ -1,12 +1,22 @@
 #include "WireBending.h"
+#include <CGAL/Exact_predicates_exact_constructions_kernel.h>
+#include <CGAL/Intersections_3/Segment_3_Segment_3.h>
+
+typedef CGAL::Exact_predicates_exact_constructions_kernel K;
+typedef K::Point_3 Point_3;
+typedef K::Segment_3 Segment_3;
+
+int anglesNumber = 400;
+extern std::chrono::duration<double> timeCC1;
+extern std::chrono::duration<double> timeCC2;//cro碰撞检测时间
 
 Wire::Wire() {
     // Initialize points matrix with 30 rows and 3 columns
-    points.resize(200, 3);
+    points.resize(anglesNumber, 3);
 }
 
 void Wire::initialize() {
-    for (int i = 0; i < 200; i++) {
+    for (int i = 0; i < points.size(); i++) {
         points.row(i) << 498.2, -240.48, 185.0;
     }
 }
@@ -1051,7 +1061,6 @@ double Collision_check::angle_cal(const Eigen::RowVector3d& p1, const Eigen::Row
 
 bool Collision_check::isIntersecting(const Eigen::Vector3d& point_start, const Eigen::Vector3d& point_end, const Eigen::RowVector3d& min_corner, const Eigen::RowVector3d& max_corner)
 {
-
 	// 检查线段的起点和终点是否在包围盒内或与包围盒相交
 	if (point_start[0] >= min_corner[0] && point_start[0] <= max_corner[0] &&
 		point_start[1] >= min_corner[1] && point_start[1] <= max_corner[1] &&
@@ -1065,24 +1074,7 @@ bool Collision_check::isIntersecting(const Eigen::Vector3d& point_start, const E
 		return true; // 终点在包围盒内
 	}
 
-	//// 检查线段是否与包围盒的每个面相交
-	//for (int i = 0; i < 3; i++) {
-	//	double tmin = (min_corner[i] - point_start[i]) / (point_end[i] - point_start[i]);
-	//	double tmax = (max_corner[i] - point_start[i]) / (point_end[i] - point_start[i]);
 
-	//	if (tmin > tmax) {
-	//		std::swap(tmin, tmax);
-	//	}
-
-	//	double t_enter = tmin;
-	//	double t_exit = tmax;
-
-	//	if (t_enter > 1.0 || t_exit < 0.0) {
-	//		return false; // 线段在包围盒的这个维度上没有相交
-	//	}
-	//}
-
-	//return true; // 线段与包围盒相交
 	return false;
 
 
@@ -1100,9 +1092,39 @@ bool Collision_check::isIntersecting(const Eigen::Vector3d& point_start, const E
 	//return true;
 }
 
+bool Collision_check::isIntersecting2(const Eigen::Vector3d& point_start, const Eigen::Vector3d& point_end, const Eigen::RowVector3d& min_corner_, const Eigen::RowVector3d& max_corner_)
+{
+
+	// 检查线段的起点和终点是否在包围盒内或与包围盒相交
+	if (point_start[0] >= min_corner[0] && point_start[0] <= max_corner[0] &&
+		point_start[1] >= min_corner[1] && point_start[1] <= max_corner[1] &&
+		point_start[2] >= min_corner[2] && point_start[2] <= max_corner[2]) {
+		return true; // 起点在包围盒内
+	}
+
+	if (point_end[0] >= min_corner[0] && point_end[0] <= max_corner[0] &&
+		point_end[1] >= min_corner[1] && point_end[1] <= max_corner[1] &&
+		point_end[2] >= min_corner[2] && point_end[2] <= max_corner[2]) {
+		return true; // 终点在包围盒内
+	}
+
+	
+	return false;
+
+}
+
+bool areSegmentsIntersecting(const Point_3& a, const Point_3& b, const Point_3& c, const Point_3& d) {
+	Segment_3 segment_ab(a, b);
+	Segment_3 segment_cd(c, d);
+
+	// 使用CGAL提供的函数判断线段是否相交
+	return CGAL::do_intersect(segment_ab, segment_cd);
+}
+
+//3：beam除cro碰撞检测时间    2：cro碰撞检测时间 其他碰撞检测时间
 bool Collision_check::checkCollision(const std::vector<double>& lengths, const std::vector<double>& angles, int startIdx, int endIdx) {
 	
-	Eigen::MatrixXd w(200, 3);
+	Eigen::MatrixXd w(anglesNumber, 3);
 	for (int i = 0; i < w.rows(); ++i) {
 		w.row(i) = wireStartPoint;
 	}
@@ -1116,7 +1138,8 @@ bool Collision_check::checkCollision(const std::vector<double>& lengths, const s
 
 	min_corner = V1.colwise().minCoeff();
 	max_corner = V1.colwise().maxCoeff();
-
+	min_corner[0] -= 2; min_corner[1] -= 2; min_corner[2] -= 2;
+	max_corner[0] += 2; max_corner[1] += 2; max_corner[2] += 2;
 	step = 0;
 	for (int bendingnum = startIdx; bendingnum < endIdx; bendingnum++)
 	{
@@ -1127,10 +1150,15 @@ bool Collision_check::checkCollision(const std::vector<double>& lengths, const s
 			//std::cout<<"w("<<i<<", 0):"<<w(i, 0)<<"a" << std::endl;
 		}
 
-		if (abs(angles[bendingnum]) > 150)
+
+		if (abs(angles[bendingnum]) < 15|| (angles[bendingnum] > 114) || (angles[bendingnum] < -150))
 		{
 			return true;
 		}
+		/*if (abs(angles[bendingnum]) > 150 )
+		{
+			return true;
+		}*/
 
 		double angleInRadians;
 		if (angles[bendingnum] > 0)
@@ -1199,8 +1227,992 @@ bool Collision_check::checkCollision(const std::vector<double>& lengths, const s
 	}
 	return false;
 }
+bool Collision_check::checkCollision2(const std::vector<double>& lengths, const std::vector<double>& angles, int startIdx, int endIdx) {
+	auto start_CC = std::chrono::high_resolution_clock::now();
+	Eigen::MatrixXd w(anglesNumber, 3);
+	for (int i = 0; i < w.rows(); ++i) {
+		w.row(i) = wireStartPoint;
+	}
+
+	igl::readPLY("..\\file\\PLY\\cube.PLY", V1, F1);
+	igl::readPLY("..\\file\\PLY\\rack_pin.PLY", V2, F2);
+	igl::readPLY("..\\file\\PLY\\bender_gear.PLY", V3, F3);
+	//igl::readPLY("E:\\WireArtPjt\\model\\PLY\\cube.PLY", V1, F1);
+	//igl::readPLY("E:\\WireArtPjt\\model\\PLY\\rack_pin.PLY", V2, F2);
+	//igl::readPLY("E:\\WireArtPjt\\model\\PLY\\bender_gear.PLY", V3, F3);
+
+	min_corner = V1.colwise().minCoeff();
+	max_corner = V1.colwise().maxCoeff();
+	min_corner[0] -= 2; min_corner[1] -= 2; min_corner[2] -= 2;
+	max_corner[0] += 2; max_corner[1] += 2; max_corner[2] += 2;
+	step = 0;
+	for (int bendingnum = startIdx; bendingnum < endIdx; bendingnum++)
+	{
+		//std::cout<<"bendingnum:"<<bendingnum<<std::endl;
+		for (int i = 0; i <= step; i++)
+		{
+			w(i, 0) += lengths[bendingnum];
+			//std::cout<<"w("<<i<<", 0):"<<w(i, 0)<<"a" << std::endl;
+		}
+
+		//if (abs(angles[bendingnum]) < 15 || (angles[bendingnum] > 114) || (angles[bendingnum] < -150))  abs(angles[bendingnum]) > 150
+		if (abs(angles[bendingnum]) < 15 || (angles[bendingnum] > 114) || (angles[bendingnum] < -150))
+		{
+			auto end_CC = std::chrono::high_resolution_clock::now();
+			timeCC2 += end_CC - start_CC;
+			return true;
+		}
+
+		double angleInRadians;
+		if (angles[bendingnum] > 0)
+		{
+			angleInRadians = -1.0 * M_PI / 380.0;
+			//angleInRadians = -0.05;
+		}
+		else {
+			angleInRadians = 1.0 * M_PI / 380.0;
+			//angleInRadians = 0.05;
+		}
+		//for (int j = 0; j < abs(angles[bendingnum]); j++)
+		//{
+		//	
+		//	Eigen::Matrix3d rotationMatrix = Eigen::AngleAxisd(angleInRadians, Eigen::Vector3d::UnitZ()).matrix();
+		//	for (int i = 0; i <= step; i++)
+		//	{
+		//		Eigen::Vector3d relativePosition = w.row(i).transpose() - wireStartPoint.transpose();
+		//		Eigen::Vector3d rotatedPosition = rotationMatrix * relativePosition;
+		//		w.row(i) = rotatedPosition.transpose() + wireStartPoint;
+		//		
+		//	}
+		//	for (int i = 0; i < step; i++)
+		//	{
+		//		//bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+		//		bool wireinter = isIntersecting(w.row(i + 1), w.row(i), min_corner, max_corner);
+		//		if (wireinter)
+		//		{
+		//			return true;
+		//		}
+		//	}
+		//}
+		double angle_already = angle_cal(w.row(step), w.row(step + 1), w.row(step + 1) + a);
+		while (1)
+		{
+
+			Eigen::Matrix3d rotationMatrix = Eigen::AngleAxisd(angleInRadians, Eigen::Vector3d::UnitZ()).matrix();
+			for (int i = 0; i <= step; i++)
+			{
+				Eigen::Vector3d relativePosition = w.row(i).transpose() - wireStartPoint.transpose();
+				Eigen::Vector3d rotatedPosition = rotationMatrix * relativePosition;
+				w.row(i) = rotatedPosition.transpose() + wireStartPoint;
+
+			}
+			for (int i = 0; i < step; i++)
+			{
+				//bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+				bool wireinter = isIntersecting(w.row(i + 1), w.row(i), min_corner, max_corner);
+				if (wireinter)
+				{
+					auto end_CC2 = std::chrono::high_resolution_clock::now();
+					timeCC2 += end_CC2 - start_CC;
+					return true;
+				}
+			}
+			angle_already = angle_cal(w.row(step), w.row(step + 1), w.row(step + 1) + a);
+			if (angle_already >= abs(angles[bendingnum]))
+			{
+				break;
+			}
+		}
+
+		/*for (int i = 0; i <= step; i++)
+		{
+			std::cout << "w(" << i << ", 0):" << w(i, 0) << std::endl;
+		}*/
+		step++;
+	}
+	auto end_CC3 = std::chrono::high_resolution_clock::now();
+	timeCC2 += end_CC3 - start_CC;
+	return false;
+}
+bool Collision_check::checkCollision3(const std::vector<double>& lengths, const std::vector<double>& angles, int startIdx, int endIdx) {
+	auto start_CC = std::chrono::high_resolution_clock::now();
+	Eigen::MatrixXd w(anglesNumber, 3);
+	for (int i = 0; i < w.rows(); ++i) {
+		w.row(i) = wireStartPoint;
+	}
+
+	igl::readPLY("..\\file\\PLY\\cube.PLY", V1, F1);
+	igl::readPLY("..\\file\\PLY\\rack_pin.PLY", V2, F2);
+	igl::readPLY("..\\file\\PLY\\bender_gear.PLY", V3, F3);
+	//igl::readPLY("E:\\WireArtPjt\\model\\PLY\\cube.PLY", V1, F1);
+	//igl::readPLY("E:\\WireArtPjt\\model\\PLY\\rack_pin.PLY", V2, F2);
+	//igl::readPLY("E:\\WireArtPjt\\model\\PLY\\bender_gear.PLY", V3, F3);
+
+	min_corner = V1.colwise().minCoeff();
+	max_corner = V1.colwise().maxCoeff();
+	min_corner[0] -= 2; min_corner[1] -= 2; min_corner[2] -= 2;
+	max_corner[0] += 2; max_corner[1] += 2; max_corner[2] += 2;
+
+	step = 0;
+	for (int bendingnum = startIdx; bendingnum < endIdx; bendingnum++)
+	{
+		//std::cout<<"bendingnum:"<<bendingnum<<std::endl;
+		for (int i = 0; i <= step; i++)
+		{
+			w(i, 0) += lengths[bendingnum];
+			//std::cout<<"w("<<i<<", 0):"<<w(i, 0)<<"a" << std::endl;
+		}
+
+		//if (abs(angles[bendingnum]) < 15 || (angles[bendingnum] > 114) || (angles[bendingnum] < -150))  abs(angles[bendingnum]) > 150
+		if (abs(angles[bendingnum]) < 15 || (angles[bendingnum] > 114) || (angles[bendingnum] < -150))
+		{
+			auto end_CC = std::chrono::high_resolution_clock::now();
+			timeCC1 += end_CC - start_CC;
+			return true;
+		}
+
+		double angleInRadians;
+		if (angles[bendingnum] > 0)
+		{
+			angleInRadians = -1.0 * M_PI / 380.0;
+			//angleInRadians = -0.05;
+		}
+		else {
+			angleInRadians = 1.0 * M_PI / 380.0;
+			//angleInRadians = 0.05;
+		}
+		//for (int j = 0; j < abs(angles[bendingnum]); j++)
+		//{
+		//	
+		//	Eigen::Matrix3d rotationMatrix = Eigen::AngleAxisd(angleInRadians, Eigen::Vector3d::UnitZ()).matrix();
+		//	for (int i = 0; i <= step; i++)
+		//	{
+		//		Eigen::Vector3d relativePosition = w.row(i).transpose() - wireStartPoint.transpose();
+		//		Eigen::Vector3d rotatedPosition = rotationMatrix * relativePosition;
+		//		w.row(i) = rotatedPosition.transpose() + wireStartPoint;
+		//		
+		//	}
+		//	for (int i = 0; i < step; i++)
+		//	{
+		//		//bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+		//		bool wireinter = isIntersecting(w.row(i + 1), w.row(i), min_corner, max_corner);
+		//		if (wireinter)
+		//		{
+		//			return true;
+		//		}
+		//	}
+		//}
+		double angle_already = angle_cal(w.row(step), w.row(step + 1), w.row(step + 1) + a);
+		while (1)
+		{
+
+			Eigen::Matrix3d rotationMatrix = Eigen::AngleAxisd(angleInRadians, Eigen::Vector3d::UnitZ()).matrix();
+			for (int i = 0; i <= step; i++)
+			{
+				Eigen::Vector3d relativePosition = w.row(i).transpose() - wireStartPoint.transpose();
+				Eigen::Vector3d rotatedPosition = rotationMatrix * relativePosition;
+				w.row(i) = rotatedPosition.transpose() + wireStartPoint;
+
+			}
+			for (int i = 0; i < step; i++)
+			{
+				//bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+				bool wireinter = isIntersecting(w.row(i + 1), w.row(i), min_corner, max_corner);
+				if (wireinter)
+				{
+					auto end_CC2 = std::chrono::high_resolution_clock::now();
+					timeCC1 += end_CC2 - start_CC;
+					return true;
+				}
+			}
+			angle_already = angle_cal(w.row(step), w.row(step + 1), w.row(step + 1) + a);
+			if (angle_already >= abs(angles[bendingnum]))
+			{
+				break;
+			}
+		}
+
+		/*for (int i = 0; i <= step; i++)
+		{
+			std::cout << "w(" << i << ", 0):" << w(i, 0) << std::endl;
+		}*/
+		step++;
+	}
+	auto end_CC3 = std::chrono::high_resolution_clock::now();
+	timeCC1 += end_CC3 - start_CC;
+	return false;
+}
+
+Eigen::RowVector2d Collision_check::calculatePinCenter(const Eigen::RowVector2d& arcCenter, const Eigen::RowVector2d& wireStartPoint, double pinDistance, double radius) {
+	// 计算 wireStartPoint 到 arcCenter 的向量
+	Eigen::RowVector2d wireToArc = arcCenter - wireStartPoint;
+
+	// 计算 wireToArc 的单位向量
+	Eigen::RowVector2d wireToArcUnit = wireToArc.normalized();
+
+	// 计算垂直于 wireToArc 的单位向量
+	Eigen::RowVector2d perpendicularUnit(-wireToArcUnit(1), wireToArcUnit(0));
+
+	// 计算 pinCenter 的位置
+	Eigen::RowVector2d pinCenter = wireStartPoint + pinDistance * wireToArcUnit + radius * perpendicularUnit;
+
+	return pinCenter;
+}
+
+Eigen::RowVector3d Collision_check::calculateCircleCenter(const Eigen::RowVector3d& startPoint, const Eigen::RowVector3d& finalPoint, double curvature_now) {
+	
+	//计算起始点到终止点的向量
+	Eigen::RowVector3d directionVector = finalPoint - startPoint;
+
+	//计算vector的垂直向量
+	Eigen::RowVector3d perpendicularVector(-directionVector.y(), directionVector.x(), directionVector.z());
+	Eigen::RowVector3d normalVector = perpendicularVector.normalized();
+
+	// 计算圆弧的中点
+	Eigen::RowVector3d midPoint = (startPoint + finalPoint) / 2.0;
+
+	//计算finalPoint  startPoint的距离长度
+	double dis = (finalPoint - startPoint).norm();
+	double radius = abs(1.0 / curvature_now);
+	double findis= sqrt(radius * radius - dis * dis / 4.0);
+	
+	Eigen::RowVector3d center;
+
+	// 计算圆心坐标
+	if (curvature_now > 0.0) {//顺时针
+		center = midPoint - findis * normalVector;
+	}
+	else
+	{
+		center = midPoint + findis * normalVector;
+	}
+	
+	return center;
+
+}
+
+//逆时针
+Eigen::RowVector3d Collision_check::moveOnSphere(const Eigen::RowVector3d& point, const Eigen::RowVector3d& center, double arcLength, double curvature_now) {
+	if (curvature_now == 0.0) {
+		std::cout<<"curvature_now == 0.0"<<std::endl;
+		return point;
+	}
+	double radius = 1 / abs(curvature_now);
+	double startAngle = std::atan2(point(1) - center(1), point(0) - center(0));
+    double deltaTheta;
+	// 计算点在运动过程中绕圆心的旋转角度
+	if(curvature_now>0)//顺时针
+	{
+		deltaTheta = -arcLength / radius;
+	}
+	else//逆时针
+	{
+		deltaTheta = arcLength / radius;
+	}
+	double finalAngle = startAngle + deltaTheta;
+	// 将旋转后的位置向量重新加到运动圆心上，得到新的点坐标
+	Eigen::RowVector3d newPoint;
+	newPoint(0) = center(0) + radius * std::cos(finalAngle);
+	newPoint(1) = center(1) + radius * std::sin(finalAngle);
+	newPoint(2) = point(2);
+	return newPoint;
+}
+
+bool Collision_check::checkCollision4(const std::vector<double>& lengths, const std::vector<double>& angles, int startIdx, int endIdx, const std::vector<bool>& segArc, const std::vector<double>& curvature) {
+
+	Eigen::MatrixXd w(anglesNumber, 3);
+	for (int i = 0; i < w.rows(); ++i) {
+		w.row(i) = wireStartPoint;
+	}
+
+	igl::readPLY("..\\file\\PLY\\cube.PLY", V1, F1);
+	igl::readPLY("..\\file\\PLY\\rack_pin.PLY", V2, F2);
+	igl::readPLY("..\\file\\PLY\\bender_gear.PLY", V3, F3);
+
+	min_corner = V1.colwise().minCoeff();
+	max_corner = V1.colwise().maxCoeff();
+
+	//Eigen::RowVector3d pinCenter(487.79, -213.64, 189.41); //wireStartPoint(498.2, -240.48, 185.0)
+	double pinRadius = 6.2;//半径
+	double pinDistance = 28.8;//pin距离出线口距离
+
+	step = 0;
+	for (int bendingnum = startIdx; bendingnum < endIdx; bendingnum++)
+	{
+		if(segArc[bendingnum] == false)
+		{
+			//std::cout<<"bendingnum:"<<bendingnum<<std::endl;
+			for (int i = 0; i <= step; i++)
+			{
+				w(i, 0) += lengths[bendingnum];
+				//std::cout<<"w("<<i<<", 0):"<<w(i, 0)<<"a" << std::endl;
+			}
+
+			if (abs(angles[bendingnum]) < 15 || (angles[bendingnum] > 114) || (angles[bendingnum] < -150))
+			{
+				return true;
+			}
+			//if (abs(angles[bendingnum]) > 150)
+			//{
+			//	return true;
+			//}
+
+			double angleInRadians;
+			if (angles[bendingnum] > 0)
+			{
+				angleInRadians = -1.0 * M_PI / 380.0;
+			}
+			else {
+				angleInRadians = 1.0 * M_PI / 380.0;
+			}
+			double angle_already = angle_cal(w.row(step), w.row(step + 1), w.row(step + 1) + a);
+			while (1)
+			{
+
+				Eigen::Matrix3d rotationMatrix = Eigen::AngleAxisd(angleInRadians, Eigen::Vector3d::UnitZ()).matrix();
+				for (int i = 0; i <= step; i++)
+				{
+					Eigen::Vector3d relativePosition = w.row(i).transpose() - wireStartPoint.transpose();
+					Eigen::Vector3d rotatedPosition = rotationMatrix * relativePosition;
+					w.row(i) = rotatedPosition.transpose() + wireStartPoint;
+
+				}
+				for (int i = 0; i < step; i++)
+				{
+					////bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+					//bool wireinter = isIntersecting(w.row(i + 1), w.row(i), min_corner, max_corner);
+					//if (wireinter)
+					//{
+					//	return true;
+					//}
+					Eigen::RowVector3d startPoint = w.row(i + 1);
+					Eigen::RowVector3d finalPoint = w.row(i);
+					if (segArc[startIdx + i])
+					{
+						Eigen::RowVector3d firstPoint = w.row(i+1);
+						Eigen::RowVector3d secondPoint = w.row(i+1);
+						double curvature_now = curvature[startIdx + i];//曲率
+						double radius_now = 1 / abs(curvature_now);
+						double arc_length_now = lengths[startIdx + i]; //弧长
+						double angle_now = arc_length_now / radius_now; //弧度
+						double angle_now_degrees = angle_now * (180.0 / M_PI); //角度
+
+						Eigen::RowVector3d arcCenter_now = calculateCircleCenter(startPoint, finalPoint, curvature_now);
+
+						for (double k = 0; k <arc_length_now; k++)
+						{
+							firstPoint = moveOnSphere(firstPoint, arcCenter_now, 1, curvature_now);
+							//bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+							bool wireinter = isIntersecting(firstPoint, secondPoint, min_corner, max_corner);
+							if (wireinter)
+							{
+								return true;
+							}
+							secondPoint = firstPoint;
+						}
+					}
+					else
+					{
+						//bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+						bool wireinter = isIntersecting(w.row(i + 1), w.row(i), min_corner, max_corner);
+						if (wireinter)
+						{
+							return true;
+						}
+					}
+				}
+				/*for (int m = 0; m <= step; m++)
+				{
+					Eigen::RowVector3d segarcstart1 = w.row(m+1);
+					Eigen::RowVector3d segarcend1 = w.row(m);
+					for (int n = m + 1; n <= step; n++)
+					{
+						Eigen::RowVector3d segarcstart2 = w.row(n + 1);
+						Eigen::RowVector3d segarcend2 = w.row(n);
+						Point_3 a(segarcstart1(0), segarcstart1(1), segarcstart1(2));
+						Point_3 b(segarcend1(0), segarcend1(1), segarcend1(2));
+						Point_3 c(segarcstart2(0), segarcstart2(1), segarcstart2(2));
+						Point_3 d(segarcend2(0), segarcend2(1), segarcend2(2));
+						if (areSegmentsIntersecting(a, b, c, d)) {
+							return true;
+						}				
+					}
+				}*/
+				/*for (int m = 0; m <= step; m++)
+				{
+					Eigen::RowVector3d segarcstart1 = w.row(m + 1);
+					Eigen::RowVector3d segarcend1 = w.row(m);
+					for (int n = m + 1; n <= step; n++)
+					{
+						Eigen::RowVector3d segarcstart2 = w.row(n + 1);
+						Eigen::RowVector3d segarcend2 = w.row(n);
+						if ((!segArc[startIdx + m]) && (!segArc[startIdx + n]))//false线段
+						{
+
+							Point_3 a(segarcstart1(0), segarcstart1(1), segarcstart1(2));
+							Point_3 b(segarcend1(0), segarcend1(1), segarcend1(2));
+							Point_3 c(segarcstart2(0), segarcstart2(1), segarcstart2(2));
+							Point_3 d(segarcend2(0), segarcend2(1), segarcend2(2));
+							if (areSegmentsIntersecting(a, b, c, d)) {
+								return true;
+							}
+						}
+						else if ((segArc[startIdx + m]) && (segArc[startIdx + n]))//圆弧
+						{
+							Eigen::RowVector3d firstPoint1 = w.row(m + 1);
+							Eigen::RowVector3d secondPoint1 = w.row(m + 1);
+							double curvature_now1 = curvature[startIdx + m];//曲率
+							double radius_now1 = 1 / abs(curvature_now1);
+							double arc_length_now1 = lengths[startIdx + m]; //弧长
+							double angle_now1 = arc_length_now1 / radius_now1; //弧度
+							double angle_now_degrees1 = angle_now1 * (180.0 / M_PI); //角度
+							Eigen::RowVector3d arcCenter_now1 = calculateCircleCenter(segarcstart1, segarcend1, curvature_now1);
+
+							Eigen::RowVector3d firstPoint2 = w.row(n + 1);
+							Eigen::RowVector3d secondPoint2 = w.row(n + 1);
+							double curvature_now2 = curvature[startIdx + n];//曲率
+							double radius_now2 = 1 / abs(curvature_now2);
+							double arc_length_now2 = lengths[startIdx + n]; //弧长
+							double angle_now2 = arc_length_now2 / radius_now2; //弧度
+							double angle_now_degrees2 = angle_now2 * (180.0 / M_PI); //角度
+							Eigen::RowVector3d arcCenter_now2 = calculateCircleCenter(segarcstart2, segarcend2, curvature_now2);
+							for (double k1 = 0; k1 < angle_now_degrees1; k1++)
+							{
+								for (double k2 = 0; k2 < angle_now_degrees2; k2++)
+								{
+									firstPoint1 = moveOnSphere(firstPoint1, arcCenter_now1, radius_now1 * M_PI / 180.0, curvature_now1);
+									firstPoint2 = moveOnSphere(firstPoint2, arcCenter_now2, radius_now2 * M_PI / 180.0, curvature_now2);
+									Point_3 a(firstPoint1(0), firstPoint1(1), firstPoint1(2));
+									Point_3 b(secondPoint1(0), secondPoint1(1), secondPoint1(2));
+									Point_3 c(firstPoint2(0), firstPoint2(1), firstPoint2(2));
+									Point_3 d(secondPoint2(0), secondPoint2(1), secondPoint2(2));
+									if (areSegmentsIntersecting(a, b, c, d)) {
+										return true;
+									}
+									secondPoint1 = firstPoint1;
+									secondPoint2 = firstPoint2;
+								}
+							}
+						}
+						else if ((segArc[startIdx + m]) && (!segArc[startIdx + n]))//圆弧 线段
+						{
+							Eigen::RowVector3d firstPoint = w.row(m + 1);
+							Eigen::RowVector3d secondPoint = w.row(m + 1);
+							double curvature_now = curvature[startIdx + m];//曲率
+							double radius_now = 1 / abs(curvature_now);
+							double arc_length_now = lengths[startIdx + m]; //弧长
+							double angle_now = arc_length_now / radius_now; //弧度
+							double angle_now_degrees = angle_now * (180.0 / M_PI); //角度
+
+							Eigen::RowVector3d arcCenter_now1 = calculateCircleCenter(segarcstart1, segarcend1, curvature_now);
+
+							for (double k = 0; k < angle_now_degrees; k++)
+							{
+								firstPoint = moveOnSphere(firstPoint, arcCenter_now1, radius_now * M_PI / 180.0, curvature_now);
+								//bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+								Point_3 a(firstPoint(0), firstPoint(1), firstPoint(2));
+								Point_3 b(secondPoint(0), secondPoint(1), secondPoint(2));
+								Point_3 c(segarcstart2(0), segarcstart2(1), segarcstart2(2));
+								Point_3 d(segarcend2(0), segarcend2(1), segarcend2(2));
+								if (areSegmentsIntersecting(a, b, c, d)) {
+									return true;
+								}
+								secondPoint = firstPoint;
+							}
+						}
+						else if ((!segArc[startIdx + m]) && (segArc[startIdx + n]))
+						{
+							Eigen::RowVector3d firstPoint = w.row(n + 1);
+							Eigen::RowVector3d secondPoint = w.row(n + 1);
+							double curvature_now = curvature[startIdx + n];//曲率
+							double radius_now = 1 / abs(curvature_now);
+							double arc_length_now = lengths[startIdx + n]; //弧长
+							double angle_now = arc_length_now / radius_now; //弧度
+							double angle_now_degrees = angle_now * (180.0 / M_PI); //角度
+
+							Eigen::RowVector3d arcCenter_now1 = calculateCircleCenter(segarcstart2, segarcend2, curvature_now);
+
+							for (double k = 0; k < angle_now_degrees; k++)
+							{
+								firstPoint = moveOnSphere(firstPoint, arcCenter_now1, radius_now * M_PI / 180.0, curvature_now);
+								//bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+								Point_3 a(firstPoint(0), firstPoint(1), firstPoint(2));
+								Point_3 b(secondPoint(0), secondPoint(1), secondPoint(2));
+								Point_3 c(segarcstart1(0), segarcstart1(1), segarcstart1(2));
+								Point_3 d(segarcend1(0), segarcend1(1), segarcend1(2));
+								if (areSegmentsIntersecting(a, b, c, d)) {
+									return true;
+								}
+								secondPoint = firstPoint;
+							}
+						}
+					}
+				}*/
+				angle_already = angle_cal(w.row(step), w.row(step + 1), w.row(step + 1) + a);
+				if (angle_already >= abs(angles[bendingnum]))
+				{
+					break;
+				}
+			}
+		}
+		else {
+			if (curvature[bendingnum] == 0)
+			{
+				std::cout<<"bug: arc curvature = 0"<<std::endl;
+				return false;
+			}
+			double radius = 1 / abs(curvature[bendingnum]);
+			Eigen::RowVector3d arcCenter = wireStartPoint;
+			if(curvature[bendingnum]>0)
+			{arcCenter(1)=arcCenter(1)-radius;}
+			else
+			{arcCenter(1)=arcCenter(1)+radius;}
+			//Eigen::RowVector3d pinCenter;
+			//pinCenter(2) = wireStartPoint(2);
+			//曲率为正，圆心在下方  另一方向不一定对
+			//Eigen::RowVector2d arcCenter2d(arcCenter(0), arcCenter(1));
+			//Eigen::RowVector2d wireStartPoint2d(wireStartPoint(0), wireStartPoint(1));
+			//Eigen::RowVector2d pinCenter2d;
+			//pinCenter2d = calculatePinCenter(arcCenter2d, wireStartPoint2d, pinDistance, radius+ pinRadius);
+			//pinCenter(0) = pinCenter2d(0);
+			//pinCenter(1) = pinCenter2d(1);
+			//Eigen::RowVector3d pinCounter;
+			//Eigen::RowVector3d arcToPinUnit = (pinCenter - arcCenter).normalized();
+			//pinCounter = pinCenter + pinRadius * arcToPinUnit;
+			//while (!w.row(step).isApprox(pinCounter))
+			//{
+			//	std::cout<<"pinCounter:"<< w.row(step) <<std::endl;
+			//	w.row(step) = moveOnSphere(wireStartPoint, arcCenter, 5);
+			//	//一起旋转 是否对？
+			//	for (int i = 0; i < step; i++)
+			//	{
+			//		w.row(i) = moveOnSphere(wireStartPoint, arcCenter, 5);
+			//	}
+			//	//碰撞检测
+			//	for (int i = 0; i < step; i++)
+			//	{
+			//		//bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+			//		bool wireinter = isIntersecting(w.row(i + 1), w.row(i), min_corner, max_corner);
+			//		if (wireinter)
+			//		{
+			//			std::cout << "D";
+			//			return true;
+			//		}
+			//	}
+			//}
+			
+			for(double forwaedLengthAleady = 1; forwaedLengthAleady <= lengths[bendingnum]; forwaedLengthAleady = forwaedLengthAleady + 1)
+			{
+				//一起旋转 是否对？
+				for (int i = 0; i <= step; i++)
+				{
+					w.row(i) = moveOnSphere(w.row(i), arcCenter, 1, curvature[bendingnum]);
+				}
+				//碰撞检测
+				for (int i = 0; i < step; i++)
+				{
+					Eigen::RowVector3d startPoint = w.row(i+1);
+					Eigen::RowVector3d finalPoint = w.row(i);
+					if (segArc[startIdx + i])
+					{
+						Eigen::RowVector3d firstPoint = w.row(i + 1);
+						Eigen::RowVector3d secondPoint = w.row(i + 1);
+						double curvature_now = curvature[startIdx + i];//曲率
+						double radius_now = 1 / abs(curvature_now);
+						double arc_length_now = lengths[startIdx + i]; //弧长
+						double angle_now = arc_length_now / radius_now; //弧度
+						double angle_now_degrees = angle_now * (180.0 / M_PI); //角度
+
+						Eigen::RowVector3d arcCenter_now = calculateCircleCenter(startPoint, finalPoint, curvature_now);
+
+						for (double k = 0; k < arc_length_now; k++)
+						{
+							firstPoint = moveOnSphere(firstPoint, arcCenter_now, 1, curvature_now);
+							//bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+							bool wireinter = isIntersecting(firstPoint, secondPoint, min_corner, max_corner);
+							if (wireinter)
+							{
+								return true;
+							}
+							secondPoint = firstPoint;
+						}
+						//curvature = segment["curvature"]
+						/*arc_length = segment["arc_length"]
+							//radius = 1 / abs(curvature)
+							angle_change = math.degrees(arc_length / radius)  # 弧长转换为角度
+
+							angle_rad = math.radians(abs(segment["angle"]))
+							for arc_segment in range(int(angle_change)) :
 
 
+								angle_rad += math.radians(1)  # 增加1度
+								x += math.cos(angle_rad) * arc_length / angle_change
+								if curvature < 0:
+						y += math.sin(angle_rad) * arc_length / angle_change
+								else:
+						y -= math.sin(angle_rad) * arc_length / angle_change*/
+						//bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+						
+					}
+					else
+					{
+						//bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+						bool wireinter = isIntersecting(w.row(i + 1), w.row(i), min_corner, max_corner);
+						if (wireinter)
+						{
+							return true;
+						}
+					}
+					
+				}
+				/*for (int m = 0; m <= step; m++)
+				{
+					Eigen::RowVector3d segarcstart1 = w.row(m + 1);
+					Eigen::RowVector3d segarcend1 = w.row(m);
+					for (int n = m + 1; n <= step; n++)
+					{
+						Eigen::RowVector3d segarcstart2 = w.row(n + 1);
+						Eigen::RowVector3d segarcend2 = w.row(n);
+						Point_3 a(segarcstart1(0), segarcstart1(1), segarcstart1(2));
+						Point_3 b(segarcend1(0), segarcend1(1), segarcend1(2));
+						Point_3 c(segarcstart2(0), segarcstart2(1), segarcstart2(2));
+						Point_3 d(segarcend2(0), segarcend2(1), segarcend2(2));
+						if (areSegmentsIntersecting(a, b, c, d)) {
+							return true;
+						}
+
+					}
+				}*/
+				/*for (int m = 0; m <= step; m++)
+				{
+					Eigen::RowVector3d segarcstart1 = w.row(m + 1);
+					Eigen::RowVector3d segarcend1 = w.row(m);
+					for (int n = m + 1; n <= step; n++)
+					{
+						Eigen::RowVector3d segarcstart2 = w.row(n + 1);
+						Eigen::RowVector3d segarcend2 = w.row(n);
+						if ((!segArc[startIdx + m]) && (!segArc[startIdx + n]))//false线段
+						{
+
+							Point_3 a(segarcstart1(0), segarcstart1(1), segarcstart1(2));
+							Point_3 b(segarcend1(0), segarcend1(1), segarcend1(2));
+							Point_3 c(segarcstart2(0), segarcstart2(1), segarcstart2(2));
+							Point_3 d(segarcend2(0), segarcend2(1), segarcend2(2));
+							if (areSegmentsIntersecting(a, b, c, d)) {
+								return true;
+							}
+						}
+						else if ((segArc[startIdx + m]) && (segArc[startIdx + n]))//圆弧
+						{
+							Eigen::RowVector3d firstPoint1 = w.row(m + 1);
+							Eigen::RowVector3d secondPoint1 = w.row(m + 1);
+							double curvature_now1 = curvature[startIdx + m];//曲率
+							double radius_now1 = 1 / abs(curvature_now1);
+							double arc_length_now1 = lengths[startIdx + m]; //弧长
+							double angle_now1 = arc_length_now1 / radius_now1; //弧度
+							double angle_now_degrees1 = angle_now1 * (180.0 / M_PI); //角度
+							Eigen::RowVector3d arcCenter_now1 = calculateCircleCenter(segarcstart1, segarcend1, curvature_now1);
+
+							Eigen::RowVector3d firstPoint2 = w.row(n + 1);
+							Eigen::RowVector3d secondPoint2 = w.row(n + 1);
+							double curvature_now2 = curvature[startIdx + n];//曲率
+							double radius_now2 = 1 / abs(curvature_now2);
+							double arc_length_now2 = lengths[startIdx + n]; //弧长
+							double angle_now2 = arc_length_now2 / radius_now2; //弧度
+							double angle_now_degrees2 = angle_now2 * (180.0 / M_PI); //角度
+							Eigen::RowVector3d arcCenter_now2 = calculateCircleCenter(segarcstart2, segarcend2, curvature_now2);
+							for (double k1 = 0; k1 < angle_now_degrees1; k1++)
+							{
+								for (double k2 = 0; k2 < angle_now_degrees2; k2++)
+								{
+									firstPoint1 = moveOnSphere(firstPoint1, arcCenter_now1, radius_now1 * M_PI / 180.0, curvature_now1);
+									firstPoint2 = moveOnSphere(firstPoint2, arcCenter_now2, radius_now2 * M_PI / 180.0, curvature_now2);
+									Point_3 a(firstPoint1(0), firstPoint1(1), firstPoint1(2));
+									Point_3 b(secondPoint1(0), secondPoint1(1), secondPoint1(2));
+									Point_3 c(firstPoint2(0), firstPoint2(1), firstPoint2(2));
+									Point_3 d(secondPoint2(0), secondPoint2(1), secondPoint2(2));
+									if (areSegmentsIntersecting(a, b, c, d)) {
+										return true;
+									}
+									secondPoint1 = firstPoint1;
+									secondPoint2 = firstPoint2;
+								}
+							}
+						}
+						else if ((segArc[startIdx + m]) && (!segArc[startIdx + n]))//圆弧 线段
+						{
+							Eigen::RowVector3d firstPoint = w.row(m + 1);
+							Eigen::RowVector3d secondPoint = w.row(m + 1);
+							double curvature_now = curvature[startIdx + m];//曲率
+							double radius_now = 1 / abs(curvature_now);
+							double arc_length_now = lengths[startIdx + m]; //弧长
+							double angle_now = arc_length_now / radius_now; //弧度
+							double angle_now_degrees = angle_now * (180.0 / M_PI); //角度
+
+							Eigen::RowVector3d arcCenter_now1 = calculateCircleCenter(segarcstart1, segarcend1, curvature_now);
+
+							for (double k = 0; k < angle_now_degrees; k++)
+							{
+								firstPoint = moveOnSphere(firstPoint, arcCenter_now1, radius_now * M_PI / 180.0, curvature_now);
+								//bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+								Point_3 a(firstPoint(0), firstPoint(1), firstPoint(2));
+								Point_3 b(secondPoint(0), secondPoint(1), secondPoint(2));
+								Point_3 c(segarcstart2(0), segarcstart2(1), segarcstart2(2));
+								Point_3 d(segarcend2(0), segarcend2(1), segarcend2(2));
+								if (areSegmentsIntersecting(a, b, c, d)) {
+									return true;
+								}
+								secondPoint = firstPoint;
+							}
+						}
+						else if ((!segArc[startIdx + m]) && (segArc[startIdx + n]))
+						{
+							Eigen::RowVector3d firstPoint = w.row(n + 1);
+							Eigen::RowVector3d secondPoint = w.row(n + 1);
+							double curvature_now = curvature[startIdx + n];//曲率
+							double radius_now = 1 / abs(curvature_now);
+							double arc_length_now = lengths[startIdx + n]; //弧长
+							double angle_now = arc_length_now / radius_now; //弧度
+							double angle_now_degrees = angle_now * (180.0 / M_PI); //角度
+
+							Eigen::RowVector3d arcCenter_now1 = calculateCircleCenter(segarcstart2, segarcend2, curvature_now);
+
+							for (double k = 0; k < angle_now_degrees; k++)
+							{
+								firstPoint = moveOnSphere(firstPoint, arcCenter_now1, radius_now * M_PI / 180.0, curvature_now);
+								//bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+								Point_3 a(firstPoint(0), firstPoint(1), firstPoint(2));
+								Point_3 b(secondPoint(0), secondPoint(1), secondPoint(2));
+								Point_3 c(segarcstart1(0), segarcstart1(1), segarcstart1(2));
+								Point_3 d(segarcend1(0), segarcend1(1), segarcend1(2));
+								if (areSegmentsIntersecting(a, b, c, d)) {
+									return true;
+								}
+								secondPoint = firstPoint;
+							}
+						}
+					}
+				}*/
+                
+				
+			}
+			if (abs(angles[bendingnum]) < 15 || (angles[bendingnum] > 114) || (angles[bendingnum] < -150))
+			{
+				return true;
+			}
+			//if (abs(angles[bendingnum]) > 150)
+			//{
+			//	return true;
+			//}
+
+			double angleInRadians;
+			if (angles[bendingnum] > 0)
+			{
+				angleInRadians = -1.0 * M_PI / 380.0;
+				//angleInRadians = -0.05;
+			}
+			else {
+				angleInRadians = 1.0 * M_PI / 380.0;
+				//angleInRadians = 0.05;
+			}
+
+			double angle_already = angle_cal(w.row(step), w.row(step + 1), w.row(step + 1) + a);
+			while (1)
+			{
+
+				Eigen::Matrix3d rotationMatrix = Eigen::AngleAxisd(angleInRadians, Eigen::Vector3d::UnitZ()).matrix();
+				for (int i = 0; i <= step; i++)
+				{
+					Eigen::Vector3d relativePosition = w.row(i).transpose() - wireStartPoint.transpose();
+					Eigen::Vector3d rotatedPosition = rotationMatrix * relativePosition;
+					w.row(i) = rotatedPosition.transpose() + wireStartPoint;
+
+				}
+				for (int i = 0; i < step; i++)
+				{
+					////bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+					//bool wireinter = isIntersecting(w.row(i + 1), w.row(i), min_corner, max_corner);
+					//if (wireinter)
+					//{
+					//	return true;
+					//}
+					Eigen::RowVector3d startPoint = w.row(i+ 1);
+					Eigen::RowVector3d finalPoint = w.row(i );
+					if (segArc[startIdx + i])
+					{
+						Eigen::RowVector3d firstPoint = w.row(i+1);
+						Eigen::RowVector3d secondPoint = w.row(i+1);
+						double curvature_now = curvature[startIdx + i];//曲率
+						double radius_now = 1 / abs(curvature_now);
+						double arc_length_now = lengths[startIdx + i]; //弧长
+						double angle_now = arc_length_now / radius_now; //弧度
+						double angle_now_degrees = angle_now * (180.0 / M_PI); //角度
+
+						Eigen::RowVector3d arcCenter_now = calculateCircleCenter(startPoint, finalPoint, curvature_now);
+
+						for (double k = 0; k < arc_length_now; k++)
+						{
+							firstPoint = moveOnSphere(firstPoint, arcCenter_now, 1, curvature_now);
+							//bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+							bool wireinter = isIntersecting(firstPoint, secondPoint, min_corner, max_corner);
+							if (wireinter)
+							{
+								return true;
+							}
+							secondPoint = firstPoint;
+						}
+						
+					}
+					else
+					{
+						//bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+						bool wireinter = isIntersecting(w.row(i + 1), w.row(i), min_corner, max_corner);
+						if (wireinter)
+						{
+							return true;
+						}
+					}
+
+				}
+				/*for (int m = 0; m <= step; m++)
+				{
+					Eigen::RowVector3d segarcstart1 = w.row(m + 1);
+					Eigen::RowVector3d segarcend1 = w.row(m);
+					for (int n = m + 1; n <= step; n++)
+					{
+						Eigen::RowVector3d segarcstart2 = w.row(n + 1);
+						Eigen::RowVector3d segarcend2 = w.row(n);
+						Point_3 a(segarcstart1(0), segarcstart1(1), segarcstart1(2));
+						Point_3 b(segarcend1(0), segarcend1(1), segarcend1(2));
+						Point_3 c(segarcstart2(0), segarcstart2(1), segarcstart2(2));
+						Point_3 d(segarcend2(0), segarcend2(1), segarcend2(2));
+						if (areSegmentsIntersecting(a, b, c, d)) {
+							return true;
+						}
+
+					}
+				}*/
+				/*for (int m = 0; m <= step; m++)
+				{
+					Eigen::RowVector3d segarcstart1 = w.row(m + 1);
+					Eigen::RowVector3d segarcend1 = w.row(m);
+					for (int n = m + 1; n <= step; n++)
+					{
+						Eigen::RowVector3d segarcstart2 = w.row(n + 1);
+						Eigen::RowVector3d segarcend2 = w.row(n);
+						if ((!segArc[startIdx + m]) && (!segArc[startIdx + n]))//false线段
+						{
+
+							Point_3 a(segarcstart1(0), segarcstart1(1), segarcstart1(2));
+							Point_3 b(segarcend1(0), segarcend1(1), segarcend1(2));
+							Point_3 c(segarcstart2(0), segarcstart2(1), segarcstart2(2));
+							Point_3 d(segarcend2(0), segarcend2(1), segarcend2(2));
+							if (areSegmentsIntersecting(a, b, c, d)) {
+								return true;
+							}
+						}
+						else if ((segArc[startIdx + m]) && (segArc[startIdx + n]))//圆弧
+						{
+							Eigen::RowVector3d firstPoint1 = w.row(m + 1);
+							Eigen::RowVector3d secondPoint1 = w.row(m + 1);
+							double curvature_now1 = curvature[startIdx + m];//曲率
+							double radius_now1 = 1 / abs(curvature_now1);
+							double arc_length_now1 = lengths[startIdx + m]; //弧长
+							double angle_now1 = arc_length_now1 / radius_now1; //弧度
+							double angle_now_degrees1 = angle_now1 * (180.0 / M_PI); //角度
+							Eigen::RowVector3d arcCenter_now1 = calculateCircleCenter(segarcstart1, segarcend1, curvature_now1);
+
+							Eigen::RowVector3d firstPoint2 = w.row(n + 1);
+							Eigen::RowVector3d secondPoint2 = w.row(n + 1);
+							double curvature_now2 = curvature[startIdx + n];//曲率
+							double radius_now2 = 1 / abs(curvature_now2);
+							double arc_length_now2 = lengths[startIdx + n]; //弧长
+							double angle_now2 = arc_length_now2 / radius_now2; //弧度
+							double angle_now_degrees2 = angle_now2 * (180.0 / M_PI); //角度
+							Eigen::RowVector3d arcCenter_now2 = calculateCircleCenter(segarcstart2, segarcend2, curvature_now2);
+							for (double k1 = 0; k1 < angle_now_degrees1; k1++)
+							{
+								for (double k2 = 0; k2 < angle_now_degrees2; k2++)
+								{
+									firstPoint1 = moveOnSphere(firstPoint1, arcCenter_now1, radius_now1 * M_PI / 180.0, curvature_now1);
+									firstPoint2 = moveOnSphere(firstPoint2, arcCenter_now2, radius_now2 * M_PI / 180.0, curvature_now2);
+									Point_3 a(firstPoint1(0), firstPoint1(1), firstPoint1(2));
+									Point_3 b(secondPoint1(0), secondPoint1(1), secondPoint1(2));
+									Point_3 c(firstPoint2(0), firstPoint2(1), firstPoint2(2));
+									Point_3 d(secondPoint2(0), secondPoint2(1), secondPoint2(2));
+									if (areSegmentsIntersecting(a, b, c, d)) {
+										return true;
+									}
+									secondPoint1 = firstPoint1;
+									secondPoint2 = firstPoint2;
+								}
+							}
+						}
+						else if ((segArc[startIdx + m]) && (!segArc[startIdx + n]))//圆弧 线段
+						{
+							Eigen::RowVector3d firstPoint = w.row(m + 1);
+							Eigen::RowVector3d secondPoint = w.row(m + 1);
+							double curvature_now = curvature[startIdx + m];//曲率
+							double radius_now = 1 / abs(curvature_now);
+							double arc_length_now = lengths[startIdx + m]; //弧长
+							double angle_now = arc_length_now / radius_now; //弧度
+							double angle_now_degrees = angle_now * (180.0 / M_PI); //角度
+
+							Eigen::RowVector3d arcCenter_now1 = calculateCircleCenter(segarcstart1, segarcend1, curvature_now);
+
+							for (double k = 0; k < angle_now_degrees; k++)
+							{
+								firstPoint = moveOnSphere(firstPoint, arcCenter_now1, radius_now * M_PI / 180.0, curvature_now);
+								//bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+								Point_3 a(firstPoint(0), firstPoint(1), firstPoint(2));
+								Point_3 b(secondPoint(0), secondPoint(1), secondPoint(2));
+								Point_3 c(segarcstart2(0), segarcstart2(1), segarcstart2(2));
+								Point_3 d(segarcend2(0), segarcend2(1), segarcend2(2));
+								if (areSegmentsIntersecting(a, b, c, d)) {
+									return true;
+								}
+								secondPoint = firstPoint;
+							}
+						}
+						else if ((!segArc[startIdx + m]) && (segArc[startIdx + n]))
+						{
+							Eigen::RowVector3d firstPoint = w.row(n + 1);
+							Eigen::RowVector3d secondPoint = w.row(n + 1);
+							double curvature_now = curvature[startIdx + n];//曲率
+							double radius_now = 1 / abs(curvature_now);
+							double arc_length_now = lengths[startIdx + n]; //弧长
+							double angle_now = arc_length_now / radius_now; //弧度
+							double angle_now_degrees = angle_now * (180.0 / M_PI); //角度
+
+							Eigen::RowVector3d arcCenter_now1 = calculateCircleCenter(segarcstart2, segarcend2, curvature_now);
+
+							for (double k = 0; k < angle_now_degrees; k++)
+							{
+								firstPoint = moveOnSphere(firstPoint, arcCenter_now1, radius_now * M_PI / 180.0, curvature_now);
+								//bool wireinter = igl::ray_mesh_intersect(w.row(i + 1), w.row(i) - w.row(i + 1), V1, F1, hits) && ((hits[0].t < 1) && (hits[0].t > 0));
+								Point_3 a(firstPoint(0), firstPoint(1), firstPoint(2));
+								Point_3 b(secondPoint(0), secondPoint(1), secondPoint(2));
+								Point_3 c(segarcstart1(0), segarcstart1(1), segarcstart1(2));
+								Point_3 d(segarcend1(0), segarcend1(1), segarcend1(2));
+								if (areSegmentsIntersecting(a, b, c, d)) {
+									return true;
+								}
+								secondPoint = firstPoint;
+							}
+						}
+					}
+				}*/
+				angle_already = angle_cal(w.row(step), w.row(step + 1), w.row(step + 1) + a);
+				if (angle_already >= abs(angles[bendingnum]))
+				{
+					break;
+				}
+			}
+		}
+		step++;
+	}
+	return false;
+}
 
 std::pair<int, int> findLongestNonCollidingSegment(const std::vector<double>& lengths, const std::vector<double>& angles, int startIndex) {
 	
